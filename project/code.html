@@ -1,0 +1,120 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Butterfly Species Identifier</title>
+</head>
+<body style="margin: 0; font-family: 'Segoe UI', 'Roboto', 'Helvetica', sans-serif; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; box-sizing: border-box;">
+
+    <!-- Main Content Card -->
+    <div id="main-card" style="background-color: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 40px; text-align: center; max-width: 500px; width: 100%; transition: all 0.3s ease;">
+        
+        <h1 style="color: #333; margin-top: 0; font-weight: 600;">Butterfly Identifier</h1>
+        <p style="color: #666; margin-bottom: 30px;">Upload an image to predict the species of the butterfly.</p>
+
+        <div id="upload-area" style="border: 2px dashed #d0dbe5; border-radius: 10px; padding: 40px; cursor: pointer; transition: background-color 0.3s, border-color 0.3s;">
+            <input type="file" id="file-input" accept="image/*" style="display: none;">
+            <div id="upload-prompt">
+                <svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" fill="#889ab2" viewBox="0 0 16 16" style="margin-bottom: 15px;"><path d="M8 6.5a.5.5 0 0 1 .5.5v1.5H10a.5.5 0 0 1 0 1H8.5V11a.5.5 0 0 1-1 0V9.5H6a.5.5 0 0 1 0-1h1.5V7a.5.5 0 0 1 .5-.5z"/><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                <p style="margin: 0; font-size: 1.1em; font-weight: 500; color: #556278;">Click to browse or drag & drop</p>
+            </div>
+        </div>
+
+        <div id="image-preview-container" style="margin-top: 30px; display: none;">
+            <img id="image-preview" src="#" alt="Image Preview" style="max-width: 100%; max-height: 300px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.07);">
+        </div>
+        
+        <div id="result-container" style="margin-top: 20px; display: none;">
+            <div id="loader" style="display: none; border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto;"></div>
+            <div id="prediction-info">
+                 <h2 style="color: #333; margin-bottom: 5px;">Prediction Result</h2>
+                 <p id="prediction-text" style="background-color: #e8f4fd; color: #2a7ab0; border-radius: 8px; padding: 15px; font-size: 1.2em; font-weight: 500; margin: 0;"></p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const previewContainer = document.getElementById('image-preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const resultContainer = document.getElementById('result-container');
+        const loader = document.getElementById('loader');
+        const predictionInfo = document.getElementById('prediction-info');
+        const predictionText = document.getElementById('prediction-text');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (event) => handleFile(event.target.files[0]));
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+        });
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        uploadArea.addEventListener('drop', (event) => handleFile(event.dataTransfer.files[0]));
+
+        function handleFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                alert('Please upload a valid image file.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                previewContainer.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+
+            getPrediction(file);
+        }
+
+        function getPrediction(file) {
+            predictionInfo.style.display = 'none';
+            resultContainer.style.display = 'block';
+            loader.style.display = 'block';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Fetch API to call the Flask backend
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                loader.style.display = 'none';
+                predictionInfo.style.display = 'block';
+                if (data.error) {
+                    predictionText.innerHTML = `<span style="color: #c0392b;">Error: ${data.error}</span>`;
+                } else {
+                    const confidence = (parseFloat(data.confidence) * 100).toFixed(1);
+                    predictionText.innerHTML = `<strong>Species:</strong> ${data.prediction} <br> <span style="font-size: 0.9em; color: #556278;">(Confidence: ${confidence}%)</span>`;
+                }
+            })
+            .catch(error => {
+                console.error('Fetch Error:', error);
+                loader.style.display = 'none';
+                predictionInfo.style.display = 'block';
+                predictionText.innerHTML = `<span style="color: #c0392b;">Prediction failed. Please try again.</span>`;
+            });
+        }
+    </script>
+
+    <style>
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</body>
+</html>
